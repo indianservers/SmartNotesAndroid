@@ -89,6 +89,8 @@ export async function createNote(
     source_url?: string | null
     due_at?: string | null
     reminder_at?: string | null
+    category_names?: string[]
+    group_id?: string | null
     tags?: string[]
   },
 ): Promise<Note> {
@@ -117,6 +119,9 @@ export async function createNote(
     color: input.color ?? null,
     icon: null,
     source_url: input.source_url ?? null,
+    category_names: normalizeCategories(input.category_names),
+    group_id: input.group_id ?? null,
+    sort_order: 0,
     reminder_at: input.reminder_at ?? null,
     due_at: input.due_at ?? null,
     is_pinned: 0,
@@ -147,6 +152,9 @@ export async function updateNote(
     is_favorite?: boolean
     is_archived?: boolean
     notebook_id?: string | null
+    category_names?: string[]
+    group_id?: string | null
+    sort_order?: number
     reminder_at?: string | null
     due_at?: string | null
   },
@@ -183,6 +191,9 @@ export async function updateNote(
     is_favorite: updates.is_favorite !== undefined ? (updates.is_favorite ? 1 : 0) : existing.is_favorite,
     is_archived: updates.is_archived !== undefined ? (updates.is_archived ? 1 : 0) : existing.is_archived,
     notebook_id: updates.notebook_id !== undefined ? updates.notebook_id : existing.notebook_id,
+    category_names: updates.category_names !== undefined ? normalizeCategories(updates.category_names) : normalizeCategories(existing.category_names),
+    group_id: updates.group_id !== undefined ? updates.group_id : (existing.group_id ?? null),
+    sort_order: updates.sort_order !== undefined ? updates.sort_order : (existing.sort_order ?? 0),
     reminder_at: updates.reminder_at !== undefined ? updates.reminder_at : existing.reminder_at,
     due_at: updates.due_at !== undefined ? updates.due_at : existing.due_at,
     sync_status: existing.sync_status === 'pending_create' ? 'pending_create' : 'pending_update',
@@ -269,6 +280,9 @@ function localNoteToNote(raw: LocalNote, title: string, content: string): Note {
     color: raw.color,
     icon: raw.icon,
     source_url: raw.source_url,
+    category_names: normalizeCategories(raw.category_names),
+    group_id: raw.group_id ?? null,
+    sort_order: raw.sort_order ?? 0,
     reminder_at: raw.reminder_at,
     due_at: raw.due_at,
     is_pinned: raw.is_pinned === 1,
@@ -396,6 +410,9 @@ export async function applyPulledSync(data: {
       color: stringOrNull(note.color),
       icon: null,
       source_url: stringOrNull(note.source_url),
+      category_names: arrayOfStrings(note.category_names),
+      group_id: stringOrNull(note.group_id),
+      sort_order: Number(note.sort_order ?? 0),
       reminder_at: stringOrNull(note.reminder_at),
       due_at: stringOrNull(note.due_at),
       is_pinned: boolToNum(note.is_pinned),
@@ -452,6 +469,15 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
+function arrayOfStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return normalizeCategories(value.filter((item): item is string => typeof item === 'string'))
+}
+
+function normalizeCategories(categories: string[] | undefined): string[] {
+  return Array.from(new Set((categories ?? []).map((item) => item.trim()).filter(Boolean))).slice(0, 12)
+}
+
 function boolToNum(value: unknown): number {
   return value === true || value === 1 ? 1 : 0
 }
@@ -486,7 +512,7 @@ async function hashBuffer(buffer: ArrayBuffer): Promise<string> {
 
 // ── Notebooks ─────────────────────────────────────────────────────────────────
 
-export async function createNotebook(title: string, color?: string, icon?: string, parentId?: string): Promise<Notebook> {
+export async function createNotebook(title: string, color?: string, icon?: string, parentId?: string, categoryNames: string[] = []): Promise<Notebook> {
   const { masterKey, userId } = requireVault()
   const id = uuidv4()
   const ts = now()
@@ -501,6 +527,7 @@ export async function createNotebook(title: string, color?: string, icon?: strin
     color: color ?? null,
     icon: icon ?? null,
     cover_file_id: null,
+    category_names: normalizeCategories(categoryNames),
     sort_order: 0,
     is_pinned: 0,
     is_archived: 0,
@@ -529,7 +556,7 @@ export async function getAllNotebooks(): Promise<Notebook[]> {
   )
 }
 
-export async function updateNotebook(id: string, updates: { title?: string; color?: string; icon?: string }): Promise<Notebook> {
+export async function updateNotebook(id: string, updates: { title?: string; color?: string; icon?: string; category_names?: string[]; parent_id?: string | null; sort_order?: number }): Promise<Notebook> {
   const { masterKey, userId } = requireVault()
   const existing = await getNotebook(id)
   if (!existing) throw new Error(`Notebook ${id} not found`)
@@ -545,6 +572,9 @@ export async function updateNotebook(id: string, updates: { title?: string; colo
     encrypted_title: JSON.stringify(encTitle),
     color: updates.color ?? existing.color,
     icon: updates.icon ?? existing.icon,
+    parent_id: updates.parent_id !== undefined ? updates.parent_id : existing.parent_id,
+    category_names: updates.category_names !== undefined ? normalizeCategories(updates.category_names) : normalizeCategories(existing.category_names),
+    sort_order: updates.sort_order !== undefined ? updates.sort_order : existing.sort_order,
     sync_status: existing.sync_status === 'pending_create' ? 'pending_create' : 'pending_update',
     updated_at: ts,
   }
@@ -572,6 +602,7 @@ function localNotebookToNotebook(raw: LocalNotebook, title: string): Notebook {
     color: raw.color,
     icon: raw.icon,
     cover_file_id: raw.cover_file_id,
+    category_names: normalizeCategories(raw.category_names),
     sort_order: raw.sort_order,
     is_pinned: raw.is_pinned === 1,
     is_archived: raw.is_archived === 1,

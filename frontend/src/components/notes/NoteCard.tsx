@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import {
   Pin, Star, Archive, Trash2, Copy, MoreVertical,
   BookOpen, Bell, Mic, Image, Paperclip, CheckSquare,
+  FolderInput, Layers,
 } from 'lucide-react'
 import { cn, formatDate, truncate, stripHtml, getColorClasses } from '@/lib/utils'
 import { useNotes } from '@/hooks/useNotes'
+import { useNotesStore } from '@/stores/notesStore'
 import type { Note } from '@/types'
 import {
   DropdownMenu,
@@ -27,11 +29,17 @@ const TYPE_ICON: Record<string, React.ElementType> = {
 interface Props {
   note: Note
   view?: 'grid' | 'list'
+  draggable?: boolean
+  isDragTarget?: boolean
+  onDragStart?: () => void
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void
+  onDrop?: () => void
 }
 
-export function NoteCard({ note, view = 'grid' }: Props) {
+export function NoteCard({ note, view = 'grid', draggable, isDragTarget, onDragStart, onDragOver, onDrop }: Props) {
   const navigate = useNavigate()
-  const { deleteNote, pinNote, favoriteNote, archiveNote } = useNotes()
+  const { deleteNote, pinNote, favoriteNote, archiveNote, updateNote } = useNotes()
+  const { notebooks } = useNotesStore()
   const [menuOpen, setMenuOpen] = useState(false)
 
   const { bg, border } = getColorClasses(note.color)
@@ -48,10 +56,15 @@ export function NoteCard({ note, view = 'grid' }: Props) {
         className={cn(
           'flex items-start gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-all',
           'active:scale-[0.99] hover:bg-surface-3/40',
-          bg, border,
-        )}
-        onClick={handleOpen}
-      >
+        bg, border,
+        isDragTarget && 'ring-2 ring-primary/70',
+      )}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onClick={handleOpen}
+    >
         {note.color && (
           <div className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full" style={{ background: note.color }} />
         )}
@@ -64,7 +77,18 @@ export function NoteCard({ note, view = 'grid' }: Props) {
           {preview && <p className="mt-0.5 text-xs text-muted-foreground truncate">{preview}</p>}
           <span className="text-[10px] text-muted-foreground/60">{formatDate(note.updated_at)}</span>
         </div>
-        <NoteMenu note={note} onDelete={() => deleteNote(note.id)} onPin={() => pinNote(note.id, !note.is_pinned)} onFavorite={() => favoriteNote(note.id, !note.is_favorite)} onArchive={() => archiveNote(note.id, true)} open={menuOpen} setOpen={setMenuOpen} />
+        <NoteMenu
+          note={note}
+          notebooks={notebooks}
+          onMove={(notebookId) => updateNote(note.id, { notebook_id: notebookId })}
+          onUngroup={() => updateNote(note.id, { group_id: null })}
+          onDelete={() => deleteNote(note.id)}
+          onPin={() => pinNote(note.id, !note.is_pinned)}
+          onFavorite={() => favoriteNote(note.id, !note.is_favorite)}
+          onArchive={() => archiveNote(note.id, true)}
+          open={menuOpen}
+          setOpen={setMenuOpen}
+        />
       </div>
     )
   }
@@ -76,7 +100,12 @@ export function NoteCard({ note, view = 'grid' }: Props) {
         'active:scale-[0.98] hover:shadow-lg hover:shadow-black/20',
         bg, border,
         note.is_pinned && 'ring-1 ring-primary/30',
+        isDragTarget && 'ring-2 ring-primary/70',
       )}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       onClick={handleOpen}
     >
       {/* Header */}
@@ -93,6 +122,9 @@ export function NoteCard({ note, view = 'grid' }: Props) {
           <div onClick={(e) => e.stopPropagation()}>
             <NoteMenu
               note={note}
+              notebooks={notebooks}
+              onMove={(notebookId) => updateNote(note.id, { notebook_id: notebookId })}
+              onUngroup={() => updateNote(note.id, { group_id: null })}
               onDelete={() => deleteNote(note.id)}
               onPin={() => pinNote(note.id, !note.is_pinned)}
               onFavorite={() => favoriteNote(note.id, !note.is_favorite)}
@@ -116,10 +148,25 @@ export function NoteCard({ note, view = 'grid' }: Props) {
         <ChecklistPreview content={note.content} />
       )}
 
+      {note.category_names.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1">
+          {note.category_names.slice(0, 3).map((category) => (
+            <span key={category} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              {category}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Footer */}
       <div className="mt-auto flex items-center justify-between pt-2">
         <span className="text-[10px] text-muted-foreground/60">{formatDate(note.updated_at)}</span>
         <div className="flex items-center gap-2">
+          {note.group_id && (
+            <span title="Grouped note">
+              <Layers className="h-3 w-3 text-primary" />
+            </span>
+          )}
           {note.reminder_at && <Bell className="h-3 w-3 text-blue-400" />}
           {note.attachments && note.attachments.length > 0 && (
             <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
@@ -159,9 +206,12 @@ function ChecklistPreview({ content }: { content: string }) {
 }
 
 function NoteMenu({
-  note, onDelete, onPin, onFavorite, onArchive, open, setOpen,
+  note, notebooks, onMove, onUngroup, onDelete, onPin, onFavorite, onArchive, open, setOpen,
 }: {
   note: Note
+  notebooks: Array<{ id: string; title: string; is_deleted: boolean }>
+  onMove: (notebookId: string | null) => void
+  onUngroup: () => void
   onDelete: () => void
   onPin: () => void
   onFavorite: () => void
@@ -187,6 +237,20 @@ function NoteMenu({
         <DropdownMenuItem onClick={onFavorite}>
           <Star className="h-4 w-4" /> {note.is_favorite ? 'Unfavorite' : 'Favorite'}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => onMove(null)}>
+          <FolderInput className="h-4 w-4" /> Move to No Notebook
+        </DropdownMenuItem>
+        {notebooks.filter((notebook) => !notebook.is_deleted).map((notebook) => (
+          <DropdownMenuItem key={notebook.id} onClick={() => onMove(notebook.id)}>
+            <BookOpen className="h-4 w-4" /> {notebook.title}
+          </DropdownMenuItem>
+        ))}
+        {note.group_id && (
+          <DropdownMenuItem onClick={onUngroup}>
+            <Layers className="h-4 w-4" /> Remove from Group
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onArchive}>
           <Archive className="h-4 w-4" /> Archive

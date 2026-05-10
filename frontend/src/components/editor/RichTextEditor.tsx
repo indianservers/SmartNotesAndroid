@@ -21,7 +21,7 @@ import {
   Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
   Quote, AlignLeft, AlignCenter, AlignRight, Highlighter,
   Link as LinkIcon, Image as ImageIcon, Undo, Redo, Minus,
-  Table as TableIcon, MoreHorizontal,
+  Table as TableIcon, Eraser, Pilcrow,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCallback, useEffect, useRef } from 'react'
@@ -146,16 +146,17 @@ function ToolbarButton({
 }
 
 function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  if (!editor) return null
   const imgInputRef = useRef<HTMLInputElement>(null)
 
   const setLink = useCallback(() => {
+    if (!editor) return
     const url = window.prompt('URL')
     if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
     else editor.chain().focus().unsetLink().run()
   }, [editor])
 
   const insertImage = useCallback((file: File) => {
+    if (!editor) return
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -166,8 +167,11 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
   }, [editor])
 
   const insertTable = useCallback(() => {
+    if (!editor) return
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
   }, [editor])
+
+  if (!editor) return null
 
   return (
     <div className="flex flex-wrap items-center gap-0.5 rounded-xl border border-border/60 bg-surface-2 p-1.5 mb-2">
@@ -182,6 +186,9 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       <div className="mx-1 h-4 w-px bg-border/60" />
 
       {/* Headings */}
+      <ToolbarButton onClick={() => editor.chain().focus().setParagraph().run()} active={editor.isActive('paragraph')} title="Paragraph">
+        <Pilcrow className="h-3.5 w-3.5" />
+      </ToolbarButton>
       <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} title="Heading 1">
         <Heading1 className="h-3.5 w-3.5" />
       </ToolbarButton>
@@ -212,6 +219,9 @@ function EditorToolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       </ToolbarButton>
       <ToolbarButton onClick={() => editor.chain().focus().toggleCode().run()} active={editor.isActive('code')} title="Inline Code">
         <Code className="h-3.5 w-3.5" />
+      </ToolbarButton>
+      <ToolbarButton onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} title="Clear Formatting">
+        <Eraser className="h-3.5 w-3.5" />
       </ToolbarButton>
 
       <div className="mx-1 h-4 w-px bg-border/60" />

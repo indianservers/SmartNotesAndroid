@@ -66,7 +66,7 @@ export function useNotes() {
   }, [setNotes, setNotebooks, setTags, setLoading])
 
   const handleCreateNote = useCallback(
-    async (input: { title: string; content: string; note_type?: NoteType; notebook_id?: string | null; color?: string | null; source_url?: string | null; due_at?: string | null; reminder_at?: string | null }) => {
+    async (input: { title: string; content: string; note_type?: NoteType; notebook_id?: string | null; color?: string | null; source_url?: string | null; due_at?: string | null; reminder_at?: string | null; category_names?: string[]; group_id?: string | null }) => {
       const note = await createNote(input)
       addNote(note)
       return note
@@ -174,8 +174,8 @@ export function useNotes() {
   // ── Notebooks ─────────────────────────────────────────────────────────────
 
   const handleCreateNotebook = useCallback(
-    async (title: string, color?: string, parentId?: string) => {
-      const nb = await createNotebook(title, color, undefined, parentId)
+    async (title: string, color?: string, parentId?: string, categoryNames: string[] = []) => {
+      const nb = await createNotebook(title, color, undefined, parentId, categoryNames)
       addNotebook(nb)
       return nb
     },

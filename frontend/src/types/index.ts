@@ -50,6 +50,9 @@ export interface LocalNote {
   color: string | null
   icon: string | null
   source_url: string | null
+  category_names?: string[]
+  group_id?: string | null
+  sort_order?: number
   reminder_at: string | null
   due_at: string | null
   is_pinned: number
@@ -74,6 +77,7 @@ export interface LocalNotebook {
   color: string | null
   icon: string | null
   cover_file_id: string | null
+  category_names?: string[]
   sort_order: number
   is_pinned: number
   is_archived: number
@@ -154,6 +158,9 @@ export interface Note {
   color: string | null
   icon: string | null
   source_url: string | null
+  category_names: string[]
+  group_id: string | null
+  sort_order: number
   reminder_at: string | null
   due_at: string | null
   is_pinned: boolean
@@ -178,6 +185,7 @@ export interface Notebook {
   color: string | null
   icon: string | null
   cover_file_id: string | null
+  category_names: string[]
   sort_order: number
   is_pinned: boolean
   is_archived: boolean
@@ -313,6 +321,7 @@ export interface SearchFilters {
   note_type?: NoteType
   notebook_id?: string
   tag_id?: string
+  category?: string
   is_pinned?: boolean
   is_favorite?: boolean
   is_archived?: boolean

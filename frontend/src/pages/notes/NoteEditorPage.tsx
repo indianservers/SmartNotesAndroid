@@ -4,7 +4,7 @@ import {
   ArrowLeft, MoreVertical, Pin, Star, Archive, Trash2,
   Palette, Save, Check, Clock, LayoutTemplate, Download,
   FileJson, FileText, FileType, FileCode,
-  Share2,
+  Share2, FolderInput, Tags,
 } from 'lucide-react'
 import { useNotes } from '@/hooks/useNotes'
 import { useNotesStore } from '@/stores/notesStore'
@@ -31,6 +31,10 @@ import { createNoteVersion } from '@/db/tasksdb'
 
 const AUTO_SAVE_MS = 1500
 
+function parseCategories(value: string): string[] {
+  return Array.from(new Set(value.split(',').map((item) => item.trim()).filter(Boolean))).slice(0, 12)
+}
+
 export default function NoteEditorPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
@@ -45,6 +49,8 @@ export default function NoteEditorPage() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [color, setColor] = useState<string | null>(null)
+  const [notebookId, setNotebookId] = useState<string | null>(searchParams.get('notebook') ?? null)
+  const [categoriesText, setCategoriesText] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -65,6 +71,8 @@ export default function NoteEditorPage() {
           setTitle(n.title)
           setContent(n.content)
           setColor(n.color)
+          setNotebookId(n.notebook_id)
+          setCategoriesText(n.category_names.join(', '))
           setCurrentNoteId(n.id)
         }
       })
@@ -77,11 +85,11 @@ export default function NoteEditorPage() {
     setSaving(true)
     try {
       if (currentNoteId) {
-        await updateNote(currentNoteId, { title, content, color })
+        await updateNote(currentNoteId, { title, content, color, notebook_id: notebookId, category_names: parseCategories(categoriesText) })
         // Save version snapshot
         await createNoteVersion(currentNoteId, title, content)
       } else {
-        const newNote = await createNote({ title, content, note_type: noteType, color })
+        const newNote = await createNote({ title, content, note_type: noteType, color, notebook_id: notebookId, category_names: parseCategories(categoriesText) })
         setCurrentNoteId(newNote.id)
         setNote(newNote)
         // Update URL without push
@@ -94,7 +102,7 @@ export default function NoteEditorPage() {
     } finally {
       setSaving(false)
     }
-  }, [currentNoteId, title, content, color, noteType, createNote, updateNote])
+  }, [currentNoteId, title, content, color, notebookId, categoriesText, noteType, createNote, updateNote])
 
   function scheduleAutoSave() {
     isDirty.current = true
@@ -124,6 +132,21 @@ export default function NoteEditorPage() {
     if (currentNoteId) {
       await updateNote(currentNoteId, { color: c })
     }
+  }
+
+  async function handleMoveNotebook(nextNotebookId: string | null) {
+    setNotebookId(nextNotebookId)
+    if (currentNoteId) {
+      const updated = await updateNote(currentNoteId, { notebook_id: nextNotebookId })
+      setNote(updated)
+    } else {
+      isDirty.current = true
+    }
+  }
+
+  function handleCategoriesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setCategoriesText(e.target.value)
+    scheduleAutoSave()
   }
 
   async function handleDelete() {
@@ -258,6 +281,15 @@ export default function NoteEditorPage() {
                 <Star className="h-4 w-4" /> {note?.is_favorite ? 'Unfavorite' : 'Favorite'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleMoveNotebook(null)}>
+                <FolderInput className="h-4 w-4" /> Move to No Notebook
+              </DropdownMenuItem>
+              {notebooks.filter((notebook) => !notebook.is_deleted).map((notebook) => (
+                <DropdownMenuItem key={notebook.id} onClick={() => handleMoveNotebook(notebook.id)}>
+                  <FolderInput className="h-4 w-4" /> {notebook.title}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
               {/* Export */}
               {note && (
                 <>
@@ -297,6 +329,32 @@ export default function NoteEditorPage() {
           placeholder="Note title…"
           className="mb-4 w-full bg-transparent text-2xl font-bold text-foreground placeholder:text-muted-foreground/30 outline-none"
         />
+
+        <div className="mb-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <label className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-2 px-3 py-2 text-sm">
+            <FolderInput className="h-4 w-4 text-muted-foreground" />
+            <select
+              value={notebookId ?? ''}
+              onChange={(event) => handleMoveNotebook(event.target.value || null)}
+              className="min-w-0 flex-1 bg-transparent text-foreground outline-none"
+              title="Move to notebook"
+            >
+              <option value="">No notebook</option>
+              {notebooks.filter((notebook) => !notebook.is_deleted).map((notebook) => (
+                <option key={notebook.id} value={notebook.id}>{notebook.title}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-2 px-3 py-2 text-sm">
+            <Tags className="h-4 w-4 text-muted-foreground" />
+            <input
+              value={categoriesText}
+              onChange={handleCategoriesChange}
+              placeholder="Categories: work, ideas"
+              className="min-w-0 flex-1 bg-transparent text-foreground placeholder:text-muted-foreground/50 outline-none"
+            />
+          </label>
+        </div>
 
         {/* Content by type */}
         {(noteType === 'rich' || noteType === 'text' || noteType === 'meeting' || noteType === 'webclip') && (

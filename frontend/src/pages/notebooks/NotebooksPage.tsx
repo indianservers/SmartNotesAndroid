@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, BookOpen, Trash2, MoreVertical, ChevronRight, Layers } from 'lucide-react'
+import { Plus, BookOpen, Trash2, MoreVertical, ChevronRight, Layers, Tags } from 'lucide-react'
 import { useNotesStore } from '@/stores/notesStore'
 import { useNotes } from '@/hooks/useNotes'
 import { Button } from '@/components/ui/button'
@@ -15,14 +15,19 @@ import type { Notebook } from '@/types'
 
 const COLORS = ['#6366f1', '#22c55e', '#f97316', '#ef4444', '#a855f7', '#14b8a6', '#eab308', '#ec4899']
 
+function parseCategories(value: string): string[] {
+  return Array.from(new Set(value.split(',').map((item) => item.trim()).filter(Boolean))).slice(0, 12)
+}
+
 export default function NotebooksPage() {
   const navigate = useNavigate()
   const { notebooks, notes, setActiveNotebook } = useNotesStore()
-  const { createNotebook, deleteNotebook } = useNotes()
+  const { createNotebook, updateNotebook, deleteNotebook } = useNotes()
 
   const [showCreate, setShowCreate] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newColor, setNewColor] = useState(COLORS[0])
+  const [newCategories, setNewCategories] = useState('')
   const [parentId, setParentId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [expandedStacks, setExpandedStacks] = useState<Set<string>>(new Set())
@@ -53,8 +58,9 @@ export default function NotebooksPage() {
   async function handleCreate() {
     if (!newTitle.trim()) return
     setCreating(true)
-    await createNotebook(newTitle.trim(), newColor, parentId ?? undefined)
+    await createNotebook(newTitle.trim(), newColor, parentId ?? undefined, parseCategories(newCategories))
     setNewTitle('')
+    setNewCategories('')
     setParentId(null)
     setShowCreate(false)
     setCreating(false)
@@ -63,6 +69,12 @@ export default function NotebooksPage() {
   function openCreateChild(id: string) {
     setParentId(id)
     setShowCreate(true)
+  }
+
+  async function editCategories(nb: Notebook) {
+    const value = window.prompt('Notebook categories', nb.category_names.join(', '))
+    if (value === null) return
+    await updateNotebook(nb.id, { category_names: parseCategories(value) })
   }
 
   function renderNotebook(nb: Notebook, depth = 0) {
@@ -95,6 +107,15 @@ export default function NotebooksPage() {
             <p className="text-xs text-muted-foreground">
               {isStack ? `${children.length} notebooks` : `${noteCounts[nb.id] ?? 0} notes`}
             </p>
+            {nb.category_names.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {nb.category_names.slice(0, 3).map((category) => (
+                  <span key={category} className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {category}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {isStack && (
@@ -121,6 +142,9 @@ export default function NotebooksPage() {
                     <DropdownMenuSeparator />
                   </>
                 )}
+                <DropdownMenuItem onClick={() => editCategories(nb)}>
+                  <Tags className="h-4 w-4" /> Categories
+                </DropdownMenuItem>
                 <DropdownMenuItem destructive onClick={() => deleteNotebook(nb.id)}>
                   <Trash2 className="h-4 w-4" /> Delete
                 </DropdownMenuItem>
@@ -187,6 +211,12 @@ export default function NotebooksPage() {
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            />
+            <Input
+              label="Categories"
+              placeholder="work, research, clients"
+              value={newCategories}
+              onChange={(e) => setNewCategories(e.target.value)}
             />
             <div>
               <p className="mb-2 text-sm font-medium text-foreground/80">Color</p>

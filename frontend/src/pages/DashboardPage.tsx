@@ -4,6 +4,7 @@ import {
   Plus, RefreshCw, Grid3X3, List, Filter,
   FileText, CheckSquare, Mic, Image, Paperclip,
   Pin, Star, Archive, Trash2, Clock, Calendar, Globe, PenTool,
+  ArrowDownAZ, Layers,
 } from 'lucide-react'
 import { useNotesStore, useFilteredNotes } from '@/stores/notesStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -14,6 +15,7 @@ import { SyncBadge } from '@/components/layout/OfflineBanner'
 import { Button } from '@/components/ui/button'
 import { cn, getInitials } from '@/lib/utils'
 import type { NoteType } from '@/types'
+import { toast } from 'sonner'
 
 const NOTE_TYPES: Array<{ type: NoteType | null; label: string; icon: React.ElementType }> = [
   { type: null, label: 'All', icon: FileText },
@@ -41,16 +43,31 @@ const QUICK_ACTIONS: Array<{ label: string; type: NoteType; icon: React.ElementT
   { label: 'File note', type: 'file', icon: Paperclip, description: 'Attach files and PDFs' },
 ]
 
+type SortKey = 'updated_desc' | 'created_desc' | 'created_asc' | 'title_asc' | 'title_desc'
+
+const SORT_LABELS: Record<SortKey, string> = {
+  updated_desc: 'Updated',
+  created_desc: 'Newest',
+  created_asc: 'Oldest',
+  title_asc: 'A-Z',
+  title_desc: 'Z-A',
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const { view, setView, setSearchFilters, isLoading, notebooks, activeNotebook, setActiveNotebook } = useNotesStore()
-  const { syncNow, refreshAll } = useNotes()
+  const { syncNow, refreshAll, updateNote } = useNotes()
   const { state: syncState, pendingCount } = useSyncStore()
   const [activeTypeFilter, setActiveTypeFilter] = useState<NoteType | null>(null)
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [smartView, setSmartView] = useState('all')
   const [showTypeFilter, setShowTypeFilter] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('updated_desc')
+  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null)
+  const [dragTargetId, setDragTargetId] = useState<string | null>(null)
   const filteredNotes = useFilteredNotes()
+  const categories = Array.from(new Set(filteredNotes.flatMap((note) => note.category_names))).sort((a, b) => a.localeCompare(b))
 
   useEffect(() => {
     refreshAll()
@@ -69,20 +86,60 @@ export default function DashboardPage() {
     setSearchFilters({ note_type: type ?? undefined })
   }
 
+  function handleCategoryFilter(category: string | null) {
+    setActiveCategory(category)
+    setSearchFilters({ category: category ?? undefined })
+  }
+
   function handleNewNote(type: NoteType = 'rich') {
     navigate(`/notes/new?type=${type}`)
   }
 
-  const pinnedNotes = filteredNotes.filter((n) => n.is_pinned && !n.is_archived && !n.is_deleted)
-  const otherNotes = filteredNotes.filter((n) => !n.is_pinned && !n.is_archived && !n.is_deleted)
-  const archivedNotes = filteredNotes.filter((n) => n.is_archived && !n.is_deleted)
-  const trashedNotes = filteredNotes.filter((n) => n.is_deleted)
+  const sortedNotes = [...filteredNotes].sort((a, b) => {
+    if (sortKey === 'title_asc') return a.title.localeCompare(b.title)
+    if (sortKey === 'title_desc') return b.title.localeCompare(a.title)
+    if (sortKey === 'created_asc') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    if (sortKey === 'created_desc') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  })
+
+  const pinnedNotes = sortedNotes.filter((n) => n.is_pinned && !n.is_archived && !n.is_deleted)
+  const otherNotes = sortedNotes.filter((n) => !n.is_pinned && !n.group_id && !n.is_archived && !n.is_deleted)
+  const archivedNotes = sortedNotes.filter((n) => n.is_archived && !n.is_deleted)
+  const trashedNotes = sortedNotes.filter((n) => n.is_deleted)
+  const groupedNotes = sortedNotes.filter((n) => n.group_id && !n.is_archived && !n.is_deleted)
 
   let displayNotes = otherNotes
   if (smartView === 'pinned') displayNotes = pinnedNotes
   else if (smartView === 'archived') displayNotes = archivedNotes
   else if (smartView === 'trash') displayNotes = trashedNotes
-  else if (smartView === 'all') displayNotes = filteredNotes.filter((n) => !n.is_deleted && !n.is_archived)
+  else if (smartView === 'all') displayNotes = sortedNotes.filter((n) => !n.is_deleted && !n.is_archived)
+
+  async function handleDropOnNote(targetId: string) {
+    if (!draggedNoteId || draggedNoteId === targetId) return
+    await updateNote(draggedNoteId, { group_id: targetId })
+    setDraggedNoteId(null)
+    setDragTargetId(null)
+    toast.success('Note grouped')
+  }
+
+  function renderNoteCard(note: (typeof displayNotes)[number]) {
+    return (
+      <NoteCard
+        key={note.id}
+        note={note}
+        view={view}
+        draggable
+        isDragTarget={dragTargetId === note.id}
+        onDragStart={() => setDraggedNoteId(note.id)}
+        onDragOver={(event) => {
+          event.preventDefault()
+          if (draggedNoteId && draggedNoteId !== note.id) setDragTargetId(note.id)
+        }}
+        onDrop={() => handleDropOnNote(note.id)}
+      />
+    )
+  }
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -186,6 +243,47 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-surface-2 px-2 py-1 text-xs text-muted-foreground">
+            <ArrowDownAZ className="h-3.5 w-3.5" />
+            <select
+              value={sortKey}
+              onChange={(event) => setSortKey(event.target.value as SortKey)}
+              className="bg-transparent text-foreground outline-none"
+              title="Sort notes"
+            >
+              {Object.entries(SORT_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+          {categories.length > 0 && (
+            <div className="flex max-w-full gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+              <button
+                onClick={() => handleCategoryFilter(null)}
+                className={cn(
+                  'flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors',
+                  !activeCategory ? 'bg-primary/15 text-primary' : 'bg-surface-2 text-muted-foreground hover:text-foreground',
+                )}
+              >
+                All categories
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => handleCategoryFilter(category)}
+                  className={cn(
+                    'flex-shrink-0 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors',
+                    activeCategory === category ? 'bg-primary/15 text-primary' : 'bg-surface-2 text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Loading */}
         {isLoading && (
           <div className="flex items-center justify-center py-12">
@@ -229,9 +327,19 @@ export default function DashboardPage() {
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pinned</h2>
             </div>
             <div className={cn(view === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
-              {pinnedNotes.map((note) => (
-                <NoteCard key={note.id} note={note} view={view} />
-              ))}
+              {pinnedNotes.map(renderNoteCard)}
+            </div>
+          </section>
+        )}
+
+        {smartView === 'all' && groupedNotes.length > 0 && (
+          <section className="mb-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Layers className="h-3.5 w-3.5 text-primary" />
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grouped</h2>
+            </div>
+            <div className={cn(view === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
+              {groupedNotes.map(renderNoteCard)}
             </div>
           </section>
         )}
@@ -245,9 +353,7 @@ export default function DashboardPage() {
               </h2>
             )}
             <div className={cn(view === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
-              {(smartView === 'all' ? otherNotes : displayNotes).map((note) => (
-                <NoteCard key={note.id} note={note} view={view} />
-              ))}
+              {(smartView === 'all' ? otherNotes : displayNotes).map(renderNoteCard)}
             </div>
           </section>
         )}

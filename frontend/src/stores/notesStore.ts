@@ -102,6 +102,7 @@ export function useFilteredNotes() {
       )
     }
     if (f.note_type) filtered = filtered.filter((n) => n.note_type === f.note_type)
+    if (f.category) filtered = filtered.filter((n) => n.category_names.includes(f.category as string))
     if (f.is_pinned) filtered = filtered.filter((n) => n.is_pinned)
     if (f.is_favorite) filtered = filtered.filter((n) => n.is_favorite)
     if (f.has_attachment) filtered = filtered.filter((n) => n.attachments && n.attachments.length > 0)
