@@ -10,6 +10,8 @@ import CodeBlockLowlight from '@tiptap/extension-code-block'
 import CharacterCount from '@tiptap/extension-character-count'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import SlashCommandsExtension from './SlashCommands'
+import NoteLinkExtension from './NoteLinkExtension'
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
   Heading1, Heading2, Heading3, List, ListOrdered, CheckSquare,
@@ -45,6 +47,8 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start writing
       Link.configure({ openOnClick: false }),
       Image,
       Placeholder.configure({ placeholder }),
+      SlashCommandsExtension,
+      NoteLinkExtension,
     ],
     content,
     editable: !readOnly,

@@ -1,13 +1,14 @@
-import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, X, Filter, SlidersHorizontal } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Search, X, SlidersHorizontal, Bookmark, BookmarkCheck, Trash2 } from 'lucide-react'
 import { useNotesStore } from '@/stores/notesStore'
+import { useTasksStore } from '@/stores/tasksStore'
 import { NoteCard } from '@/components/notes/NoteCard'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { cn, NOTE_TYPE_LABELS, stripHtml } from '@/lib/utils'
+import { cn, stripHtml } from '@/lib/utils'
 import type { NoteType } from '@/types'
+import { createSavedSearch, getSavedSearches, deleteSavedSearch } from '@/db/tasksdb'
+import { useAuthStore } from '@/stores/authStore'
+import { toast } from 'sonner'
 
 const FILTERS: Array<{ type: NoteType; label: string }> = [
   { type: 'rich', label: 'Rich' },
@@ -18,12 +19,22 @@ const FILTERS: Array<{ type: NoteType; label: string }> = [
 ]
 
 export default function SearchPage() {
-  const navigate = useNavigate()
   const { notes, tags } = useNotesStore()
+  const { savedSearches, addSavedSearch, removeSavedSearch } = useTasksStore()
+  const userId = useAuthStore((s) => s.user?.id ?? '')
+
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<NoteType | null>(null)
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
+
+  // Load saved searches on mount
+  useEffect(() => {
+    if (!userId) return
+    getSavedSearches(userId).then((searches) => {
+      searches.forEach((s) => addSavedSearch(s))
+    })
+  }, [userId, addSavedSearch])
 
   const results = useMemo(() => {
     if (!query && !typeFilter && !tagFilter) return []
@@ -40,6 +51,38 @@ export default function SearchPage() {
         )
       })
   }, [query, typeFilter, tagFilter, notes])
+
+  const hasActiveFilters = !!(query || typeFilter || tagFilter)
+
+  const isSearchSaved = savedSearches.some(
+    (s) => s.query === query && s.type_filter === typeFilter && s.tag_filter === tagFilter,
+  )
+
+  async function handleSaveSearch() {
+    if (!hasActiveFilters || isSearchSaved) return
+    const label = query || [typeFilter, tagFilter].filter(Boolean).join(', ') || 'Search'
+    const search = await createSavedSearch({
+      user_id: userId,
+      label,
+      query,
+      type_filter: typeFilter,
+      tag_filter: tagFilter,
+    })
+    addSavedSearch(search)
+    toast.success('Search saved')
+  }
+
+  async function handleDeleteSaved(id: string) {
+    await deleteSavedSearch(id)
+    removeSavedSearch(id)
+    toast.success('Saved search removed')
+  }
+
+  function applySearch(query: string, typeFilter: NoteType | null, tagFilter: string | null) {
+    setQuery(query)
+    setTypeFilter(typeFilter)
+    setTagFilter(tagFilter)
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -65,8 +108,21 @@ export default function SearchPage() {
                 </button>
               )}
             </div>
+
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleSaveSearch}
+                disabled={isSearchSaved}
+                title={isSearchSaved ? 'Already saved' : 'Save this search'}
+              >
+                {isSearchSaved ? <BookmarkCheck className="h-4 w-4 text-primary" /> : <Bookmark className="h-4 w-4" />}
+              </Button>
+            )}
+
             <Button variant="ghost" size="icon" onClick={() => setShowFilters(!showFilters)}>
-              <SlidersHorizontal className="h-4 w-4" />
+              <SlidersHorizontal className={cn('h-4 w-4', (typeFilter || tagFilter) && 'text-primary')} />
             </Button>
           </div>
 
@@ -114,8 +170,34 @@ export default function SearchPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-screen-sm px-4 py-4">
-        {!query && !typeFilter && !tagFilter ? (
+      <div className="mx-auto max-w-screen-sm px-4 py-4 space-y-5">
+        {/* Saved searches */}
+        {savedSearches.length > 0 && !hasActiveFilters && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Saved Searches</p>
+            <div className="flex flex-wrap gap-2">
+              {savedSearches.map((s) => (
+                <div key={s.id} className="group flex items-center gap-1 rounded-full border border-border/60 bg-surface-2 px-3 py-1.5">
+                  <button
+                    onClick={() => applySearch(s.query, s.type_filter as NoteType | null, s.tag_filter)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-foreground"
+                  >
+                    <Bookmark className="h-3 w-3 text-primary" />
+                    {s.label}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSaved(s.id)}
+                    className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!hasActiveFilters ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Search className="mb-3 h-10 w-10 text-muted-foreground/30" />
             <p className="text-sm text-muted-foreground">Search your encrypted notes</p>

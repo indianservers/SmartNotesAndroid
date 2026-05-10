@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import {
   User, Lock, LogOut, RefreshCw, Smartphone, Shield,
   ChevronRight, Download, Trash2, Bell, Eye, EyeOff,
-  Key, Cloud,
+  Key, Cloud, FileJson,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotes } from '@/hooks/useNotes'
 import { useAuthStore } from '@/stores/authStore'
+import { useNotesStore } from '@/stores/notesStore'
 import { useSyncStore } from '@/stores/syncStore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ import { cn, getInitials, formatDate } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { authApi } from '@/services/api'
 import { toast } from 'sonner'
+import { exportAsJSON } from '@/lib/exportNote'
 
 export default function SettingsPage() {
   const navigate = useNavigate()
@@ -23,6 +25,7 @@ export default function SettingsPage() {
   const { syncNow } = useNotes()
   const { state: syncState, lastSync, pendingCount } = useSyncStore()
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const { notes } = useNotesStore()
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,10 +110,15 @@ export default function SettingsPage() {
               badge="Soon"
             />
             <SettingsRow
-              icon={<Download className="h-4 w-4" />}
-              label="Export Notes"
-              description="Download all notes as JSON"
-              onClick={() => toast.info('Export coming soon')}
+              icon={<FileJson className="h-4 w-4" />}
+              label="Export All Notes"
+              description={`Download ${notes.filter((n) => !n.is_deleted).length} notes as JSON`}
+              onClick={() => {
+                const active = notes.filter((n) => !n.is_deleted)
+                if (!active.length) { toast.error('No notes to export'); return }
+                exportAsJSON(active)
+                toast.success('Export started')
+              }}
             />
           </div>
         </section>

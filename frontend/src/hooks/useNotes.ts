@@ -163,8 +163,8 @@ export function useNotes() {
   // ── Notebooks ─────────────────────────────────────────────────────────────
 
   const handleCreateNotebook = useCallback(
-    async (title: string, color?: string) => {
-      const nb = await createNotebook(title, color)
+    async (title: string, color?: string, parentId?: string) => {
+      const nb = await createNotebook(title, color, undefined, parentId)
       addNotebook(nb)
       return nb
     },

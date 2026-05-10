@@ -2,12 +2,17 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, MoreVertical, Pin, Star, Archive, Trash2,
-  Palette, Bell, BookOpen, Tag as TagIcon, Save, Check,
+  Palette, Save, Check, Clock, LayoutTemplate, Download,
+  FileJson, FileText, FileType, FileCode,
 } from 'lucide-react'
 import { useNotes } from '@/hooks/useNotes'
 import { useNotesStore } from '@/stores/notesStore'
 import { RichTextEditor } from '@/components/editor/RichTextEditor'
 import { ChecklistEditor } from '@/components/editor/ChecklistEditor'
+import { PDFViewer } from '@/components/editor/PDFViewer'
+import { VersionHistory } from '@/components/notes/VersionHistory'
+import { TemplatesGallery } from '@/components/notes/TemplatesGallery'
+import type { NoteTemplate } from '@/components/notes/TemplatesGallery'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -16,6 +21,9 @@ import {
 import { cn, NOTE_COLORS, NOTE_TYPE_LABELS } from '@/lib/utils'
 import type { Note, NoteType } from '@/types'
 import { toast } from 'sonner'
+import { exportAsJSON, exportAsHTML, exportAsPDF, exportAsMarkdown } from '@/lib/exportNote'
+import { createNoteVersion } from '@/db/tasksdb'
+import { useAuthStore } from '@/stores/authStore'
 
 const AUTO_SAVE_MS = 1500
 
@@ -29,6 +37,8 @@ export default function NoteEditorPage() {
   const { createNote, updateNote, deleteNote, pinNote, favoriteNote, archiveNote, getNoteById } = useNotes()
   const { notebooks, tags } = useNotesStore()
 
+  const userId = useAuthStore((s) => s.user?.id ?? '')
+
   const [note, setNote] = useState<Note | null>(null)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -37,6 +47,8 @@ export default function NoteEditorPage() {
   const [saved, setSaved] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null)
+  const [showVersionHistory, setShowVersionHistory] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isDirty = useRef(false)
@@ -63,6 +75,9 @@ export default function NoteEditorPage() {
     try {
       if (currentNoteId) {
         await updateNote(currentNoteId, { title, content, color })
+        // Save version snapshot
+        const wordCount = content.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length
+        await createNoteVersion({ note_id: currentNoteId, user_id: userId, title, content, word_count: wordCount })
       } else {
         const newNote = await createNote({ title, content, note_type: noteType, color })
         setCurrentNoteId(newNote.id)
@@ -133,6 +148,21 @@ export default function NoteEditorPage() {
     setNote((n) => n ? { ...n, is_favorite: !n.is_favorite } : n)
   }
 
+  function handleTemplateSelect(template: NoteTemplate) {
+    setTitle(template.title.replace('{Date}', new Date().toLocaleDateString()))
+    setContent(template.content)
+    isDirty.current = true
+    scheduleAutoSave()
+  }
+
+  function handleRestoreVersion(version: import('@/types/tasks').NoteVersion) {
+    setTitle(version.title)
+    setContent(version.content)
+    isDirty.current = true
+    scheduleAutoSave()
+    toast.success('Version restored')
+  }
+
   // Save on unmount
   useEffect(() => {
     return () => {
@@ -192,13 +222,27 @@ export default function NoteEditorPage() {
             <Save className="h-4 w-4" />
           </Button>
 
+          {/* Templates (only for new notes) */}
+          {isNew && (
+            <Button variant="ghost" size="icon-sm" onClick={() => setShowTemplates(true)} title="Templates">
+              <LayoutTemplate className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Version history (only for saved notes) */}
+          {currentNoteId && (
+            <Button variant="ghost" size="icon-sm" onClick={() => setShowVersionHistory(true)} title="Version history">
+              <Clock className="h-4 w-4" />
+            </Button>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onClick={handlePin}>
                 <Pin className="h-4 w-4" /> {note?.is_pinned ? 'Unpin' : 'Pin'}
               </DropdownMenuItem>
@@ -206,6 +250,24 @@ export default function NoteEditorPage() {
                 <Star className="h-4 w-4" /> {note?.is_favorite ? 'Unfavorite' : 'Favorite'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              {/* Export */}
+              {note && (
+                <>
+                  <DropdownMenuItem onClick={() => exportAsJSON([note])}>
+                    <FileJson className="h-4 w-4" /> Export JSON
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportAsHTML(note)}>
+                    <FileCode className="h-4 w-4" /> Export HTML
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportAsMarkdown(note)}>
+                    <FileText className="h-4 w-4" /> Export Markdown
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportAsPDF(note)}>
+                    <Download className="h-4 w-4" /> Export PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onClick={handleArchive}>
                 <Archive className="h-4 w-4" /> Archive
               </DropdownMenuItem>
@@ -256,6 +318,23 @@ export default function NoteEditorPage() {
           <FileNoteSection />
         )}
       </div>
+
+      {/* Version History dialog */}
+      {currentNoteId && (
+        <VersionHistory
+          noteId={currentNoteId}
+          open={showVersionHistory}
+          onClose={() => setShowVersionHistory(false)}
+          onRestore={handleRestoreVersion}
+        />
+      )}
+
+      {/* Templates gallery */}
+      <TemplatesGallery
+        open={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onSelect={handleTemplateSelect}
+      />
     </div>
   )
 }

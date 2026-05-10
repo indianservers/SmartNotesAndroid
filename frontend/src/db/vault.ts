@@ -268,7 +268,7 @@ function localNoteToNote(raw: LocalNote, title: string, content: string): Note {
 
 // ── Notebooks ─────────────────────────────────────────────────────────────────
 
-export async function createNotebook(title: string, color?: string, icon?: string): Promise<Notebook> {
+export async function createNotebook(title: string, color?: string, icon?: string, parentId?: string): Promise<Notebook> {
   const { masterKey, userId } = requireVault()
   const id = uuidv4()
   const ts = now()
@@ -277,6 +277,7 @@ export async function createNotebook(title: string, color?: string, icon?: strin
     id,
     server_id: null,
     user_id: userId,
+    parent_id: parentId ?? null,
     encrypted_title: JSON.stringify(encTitle),
     encrypted_description: null,
     color: color ?? null,
@@ -347,6 +348,7 @@ function localNotebookToNotebook(raw: LocalNotebook, title: string): Notebook {
   return {
     id: raw.id,
     server_id: raw.server_id,
+    parent_id: raw.parent_id ?? null,
     title,
     description: null,
     color: raw.color,

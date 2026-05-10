@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Search, BookOpen, Tag, Settings } from 'lucide-react'
+import { Home, Search, BookOpen, CheckSquare, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV = [
   { to: '/dashboard', icon: Home, label: 'Home' },
   { to: '/search', icon: Search, label: 'Search' },
   { to: '/notebooks', icon: BookOpen, label: 'Notebooks' },
-  { to: '/tags', icon: Tag, label: 'Tags' },
+  { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 

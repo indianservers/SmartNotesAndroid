@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { useAuthStore } from '@/stores/authStore'
 import { clearSessionKey } from '@/db/vault'
+import { initNotifications } from '@/lib/notifications'
 
 // Auth pages
 import LoginPage from '@/pages/auth/LoginPage'
@@ -19,6 +20,7 @@ import NotebooksPage from '@/pages/notebooks/NotebooksPage'
 import TagsPage from '@/pages/tags/TagsPage'
 import SearchPage from '@/pages/search/SearchPage'
 import SettingsPage from '@/pages/settings/SettingsPage'
+import TasksPage from '@/pages/tasks/TasksPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +47,12 @@ export default function App() {
       useAuthStore.getState().clearAuth()
     }
     window.addEventListener('auth:logout', handleForceLogout)
+
+    // Init notifications (request permission + register SW)
+    if (useAuthStore.getState().isAuthenticated) {
+      initNotifications().catch(() => {})
+    }
+
     return () => window.removeEventListener('auth:logout', handleForceLogout)
   }, [])
 
@@ -64,6 +72,7 @@ export default function App() {
             <Route path="/notebooks" element={<NotebooksPage />} />
             <Route path="/tags" element={<TagsPage />} />
             <Route path="/search" element={<SearchPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 

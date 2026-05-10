@@ -68,6 +68,7 @@ export interface LocalNotebook {
   id: string
   server_id: string | null
   user_id: string
+  parent_id: string | null
   encrypted_title: string
   encrypted_description: string | null
   color: string | null
@@ -168,6 +169,7 @@ export interface Note {
 export interface Notebook {
   id: string
   server_id: string | null
+  parent_id: string | null
   title: string
   description: string | null
   color: string | null
