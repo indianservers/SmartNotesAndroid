@@ -27,6 +27,7 @@ import SettingsPage from '@/pages/settings/SettingsPage'
 import TasksPage from '@/pages/tasks/TasksPage'
 import ClipPage from '@/pages/clip/ClipPage'
 import CalendarPage from '@/pages/calendar/CalendarPage'
+import SyncCenterPage from '@/pages/sync/SyncCenterPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,6 +129,7 @@ export default function App() {
               <Route path="/tasks" element={<TasksPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/clip" element={<ClipPage />} />
+              <Route path="/sync" element={<SyncCenterPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
 

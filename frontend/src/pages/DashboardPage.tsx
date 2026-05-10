@@ -4,7 +4,7 @@ import {
   Plus, RefreshCw, Grid3X3, List, Filter,
   FileText, CheckSquare, Mic, Image, Paperclip,
   Pin, Star, Archive, Trash2, Clock, Calendar, Globe, PenTool,
-  ArrowDownAZ, Layers,
+  ArrowDownAZ, Layers, LayoutGrid, Rows3, ScanSearch, UploadCloud, Keyboard,
 } from 'lucide-react'
 import { useNotesStore, useFilteredNotes } from '@/stores/notesStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -44,6 +44,7 @@ const QUICK_ACTIONS: Array<{ label: string; type: NoteType; icon: React.ElementT
 ]
 
 type SortKey = 'updated_desc' | 'created_desc' | 'created_asc' | 'title_asc' | 'title_desc'
+type Density = 'compact' | 'comfortable' | 'expanded'
 
 const SORT_LABELS: Record<SortKey, string> = {
   updated_desc: 'Updated',
@@ -58,12 +59,12 @@ export default function DashboardPage() {
   const { user } = useAuthStore()
   const { view, setView, setSearchFilters, isLoading, notebooks, activeNotebook, setActiveNotebook } = useNotesStore()
   const { syncNow, refreshAll, updateNote } = useNotes()
-  const { state: syncState, pendingCount } = useSyncStore()
+  const { state: syncState } = useSyncStore()
   const [activeTypeFilter, setActiveTypeFilter] = useState<NoteType | null>(null)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [smartView, setSmartView] = useState('all')
-  const [showTypeFilter, setShowTypeFilter] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('updated_desc')
+  const [density, setDensity] = useState<Density>('comfortable')
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null)
   const [dragTargetId, setDragTargetId] = useState<string | null>(null)
   const filteredNotes = useFilteredNotes()
@@ -102,6 +103,11 @@ export default function DashboardPage() {
     if (sortKey === 'created_desc') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   })
+
+  const activeNotes = sortedNotes.filter((n) => !n.is_deleted && !n.is_archived)
+  const todaysNotes = activeNotes.filter((n) => new Date(n.updated_at).toDateString() === new Date().toDateString())
+  const attachmentNotes = activeNotes.filter((n) => (n.attachments?.length ?? 0) > 0)
+  const unsyncedNotes = activeNotes.filter((n) => n.sync_status !== 'synced')
 
   const pinnedNotes = sortedNotes.filter((n) => n.is_pinned && !n.is_archived && !n.is_deleted)
   const otherNotes = sortedNotes.filter((n) => !n.is_pinned && !n.group_id && !n.is_archived && !n.is_deleted)
@@ -202,7 +208,29 @@ export default function DashboardPage() {
         )}
       </header>
 
-      <div className="mx-auto max-w-screen-sm px-4 py-4">
+      <div className="mx-auto max-w-6xl px-4 py-4">
+        <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SmartCard icon={Clock} label="Today" value={todaysNotes.length} onClick={() => setSmartView('recent')} />
+          <SmartCard icon={UploadCloud} label="Unsynced" value={unsyncedNotes.length} onClick={() => syncNow()} />
+          <SmartCard icon={Paperclip} label="Attachments" value={attachmentNotes.length} onClick={() => handleTypeFilter('file')} />
+          <SmartCard icon={ScanSearch} label="OCR ready" value={attachmentNotes.length} onClick={() => navigate('/search')} />
+        </section>
+
+        {activeNotes.length === 0 && (
+          <section className="mb-4 rounded-2xl border border-border/60 bg-surface-1 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold">Setup checklist</h2>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <ChecklistStep icon={BookOpenIcon} text="Create notebook" onClick={() => navigate('/notebooks')} />
+              <ChecklistStep icon={FileText} text="Write first note" onClick={() => handleNewNote()} />
+              <ChecklistStep icon={Globe} text="Try web clipper" onClick={() => navigate('/clip')} />
+              <ChecklistStep icon={UploadCloud} text="Connect backup" onClick={() => navigate('/settings')} />
+            </div>
+          </section>
+        )}
+
         {/* Smart views */}
         <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {SMART_VIEWS.map(({ key, label, icon: Icon }) => (
@@ -282,6 +310,22 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
+          <div className="ml-auto flex items-center gap-1 rounded-xl border border-border/60 bg-surface-2 p-1">
+            {([
+              { key: 'compact' as Density, icon: Rows3 },
+              { key: 'comfortable' as Density, icon: LayoutGrid },
+              { key: 'expanded' as Density, icon: Keyboard },
+            ]).map(({ key, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setDensity(key)}
+                className={cn('rounded-lg p-1.5 text-muted-foreground hover:text-foreground', density === key && 'bg-primary/15 text-primary')}
+                title={`${key} density`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Loading */}
@@ -326,7 +370,7 @@ export default function DashboardPage() {
               <Pin className="h-3.5 w-3.5 text-primary" />
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pinned</h2>
             </div>
-            <div className={cn(view === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
+            <div className={cn(view === 'grid' ? densityGrid(density) : densityList(density))}>
               {pinnedNotes.map(renderNoteCard)}
             </div>
           </section>
@@ -338,7 +382,7 @@ export default function DashboardPage() {
               <Layers className="h-3.5 w-3.5 text-primary" />
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Grouped</h2>
             </div>
-            <div className={cn(view === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
+            <div className={cn(view === 'grid' ? densityGrid(density) : densityList(density))}>
               {groupedNotes.map(renderNoteCard)}
             </div>
           </section>
@@ -352,7 +396,7 @@ export default function DashboardPage() {
                 {activeNotebook ? notebooks.find((n) => n.id === activeNotebook)?.title : 'Recent'}
               </h2>
             )}
-            <div className={cn(view === 'grid' ? 'grid grid-cols-2 gap-3' : 'space-y-2')}>
+            <div className={cn(view === 'grid' ? densityGrid(density) : densityList(density))}>
               {(smartView === 'all' ? otherNotes : displayNotes).map(renderNoteCard)}
             </div>
           </section>
@@ -374,3 +418,36 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+function densityGrid(density: Density) {
+  if (density === 'compact') return 'grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5'
+  if (density === 'expanded') return 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3'
+  return 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4'
+}
+
+function densityList(density: Density) {
+  return density === 'compact' ? 'space-y-1.5' : density === 'expanded' ? 'space-y-3' : 'space-y-2'
+}
+
+function SmartCard({ icon: Icon, label, value, onClick }: { icon: React.ElementType; label: string; value: number; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="rounded-2xl border border-border/60 bg-surface-1 p-4 text-left transition-colors hover:bg-surface-2">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="text-2xl font-semibold">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </button>
+  )
+}
+
+function ChecklistStep({ icon: Icon, text, onClick }: { icon: React.ElementType; text: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-2 rounded-xl border border-border/60 bg-surface-2 px-3 py-2 text-left text-sm hover:bg-surface-3">
+      <Icon className="h-4 w-4 text-primary" />
+      {text}
+    </button>
+  )
+}
+
+const BookOpenIcon = Layers

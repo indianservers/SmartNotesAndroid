@@ -4,7 +4,7 @@ import {
   ArrowLeft, MoreVertical, Pin, Star, Archive, Trash2,
   Palette, Save, Check, Clock, LayoutTemplate, Download,
   FileJson, FileText, FileType, FileCode,
-  Share2, FolderInput, Tags,
+  Share2, FolderInput, Tags, Info, Link2, Paperclip, ListChecks, History, ShieldCheck,
 } from 'lucide-react'
 import { useNotes } from '@/hooks/useNotes'
 import { useNotesStore } from '@/stores/notesStore'
@@ -197,6 +197,10 @@ export default function NoteEditorPage() {
   }, [save])
 
   const activeColor = NOTE_COLORS.find((c) => c.value === color)
+  const categoryChips = parseCategories(categoriesText)
+  const currentNotebook = notebooks.find((notebook) => notebook.id === notebookId)
+  const wordCount = content.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).filter(Boolean).length
+  const linkedNotes = (content.match(/data-note-id=/g) ?? []).length
 
   return (
     <div className={cn('min-h-screen', activeColor?.bg ?? 'bg-background')}>
@@ -320,7 +324,8 @@ export default function NoteEditorPage() {
       </div>
 
       {/* Editor */}
-      <div className="mx-auto max-w-screen-sm px-4 py-5">
+      <div className="mx-auto grid max-w-6xl gap-5 px-4 py-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-w-0">
         {/* Title */}
         <input
           type="text"
@@ -355,6 +360,17 @@ export default function NoteEditorPage() {
             />
           </label>
         </div>
+
+        {categoryChips.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            {categoryChips.map((category) => (
+              <span key={category} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <Tags className="h-3 w-3" />
+                {category}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Content by type */}
         {(noteType === 'rich' || noteType === 'text' || noteType === 'meeting' || noteType === 'webclip') && (
@@ -397,6 +413,59 @@ export default function NoteEditorPage() {
         />
 
         <NoteTasksPanel noteId={currentNoteId} />
+        </div>
+
+        <aside className="hidden space-y-3 xl:block">
+          <InfoPanel
+            title="Note info"
+            icon={Info}
+            rows={[
+              ['Type', NOTE_TYPE_LABELS[noteType] ?? 'Note'],
+              ['Notebook', currentNotebook?.title ?? 'No notebook'],
+              ['Words', String(wordCount)],
+              ['Characters', String(content.replace(/<[^>]*>/g, '').length)],
+            ]}
+          />
+          <InfoPanel
+            title="Connections"
+            icon={Link2}
+            rows={[
+              ['Linked notes', String(linkedNotes)],
+              ['Tasks', currentNoteId ? 'Embedded' : 'Save first'],
+              ['Backlinks', 'Tracked by [[links]]'],
+            ]}
+          />
+          <InfoPanel
+            title="Assets"
+            icon={Paperclip}
+            rows={[
+              ['Attachments', String(note?.attachments?.length ?? 0)],
+              ['OCR index', (note?.attachments?.length ?? 0) > 0 ? 'Ready' : 'None'],
+              ['Export', 'JSON, HTML, MD, PDF'],
+            ]}
+          />
+          <div className="rounded-2xl border border-border/60 bg-surface-1 p-3">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Secure actions
+            </div>
+            <div className="grid gap-2">
+              <Button size="sm" variant="outline" onClick={save}>
+                <Save className="h-4 w-4" /> Save snapshot
+              </Button>
+              {currentNoteId && (
+                <Button size="sm" variant="ghost" onClick={() => setShowVersionHistory(true)}>
+                  <History className="h-4 w-4" /> Version history
+                </Button>
+              )}
+              {currentNoteId && (
+                <Button size="sm" variant="ghost" onClick={() => setShowShare(true)}>
+                  <Share2 className="h-4 w-4" /> Share
+                </Button>
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
 
       {/* Version History dialog */}
@@ -460,5 +529,32 @@ function FileNoteSection() {
       <p className="text-sm text-muted-foreground">Attach any file to this note</p>
       <Button variant="outline" size="sm">Attach File</Button>
     </div>
+  )
+}
+
+function InfoPanel({
+  title,
+  icon: Icon,
+  rows,
+}: {
+  title: string
+  icon: React.ElementType
+  rows: Array<[string, string]>
+}) {
+  return (
+    <section className="rounded-2xl border border-border/60 bg-surface-1 p-3">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+        <Icon className="h-4 w-4 text-primary" />
+        {title}
+      </div>
+      <div className="space-y-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-2.5 py-2 text-xs">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="truncate text-right font-medium">{value}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
